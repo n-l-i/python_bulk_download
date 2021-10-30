@@ -3,6 +3,7 @@ from urllib.error import URLError, HTTPError
 from multiprocessing.pool import ThreadPool as thread_pool
 from time import time, sleep
 from random import uniform as random_float
+from sys import getsizeof
 
 def make_http_requests(urls,bandwidth_utilisation=-1,threads=32):
     global cooldown
@@ -60,7 +61,8 @@ def _make_http_request(url):
                         while cooldown_timer < 60:
                             sleep(cooldown_timer)
                             try:
-                                response = urlopen("https://"+url,timeout=10).read().decode("utf-8")
+                                response_obj = urlopen(url,timeout=10)
+                                response = response_obj.read().decode("utf-8")
                                 break
                             except:
                                 cooldown_timer *= 2
@@ -69,7 +71,7 @@ def _make_http_request(url):
         finally:
             line_size = len(response_obj.reason)+15
             header_size = sum(len(key)+len(value)+4 for key,value in response_obj.headers.items())+2
-            content_size = int(response_obj.headers.get("content-length",0))
+            content_size = max(getsizeof(response)-49, int(response_obj.headers.get("content-length",0)))
             download_size += (line_size+header_size+content_size)*1.10
             if successful:
                 break
