@@ -1,5 +1,9 @@
 from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
+from errno import ETIMEDOUT
+from socket import gaierror
+from ssl import SSLCertVerificationError, SSLError
+from http.client import RemoteDisconnected,IncompleteRead
 from multiprocessing.pool import ThreadPool as thread_pool
 from time import time, sleep
 from random import uniform as random_float
@@ -26,7 +30,7 @@ def _make_http_request(url):
     global max_bandwidth_usage
     if not (url.startswith("https://") or url.startswith("http://")):
         url = "https://"+url
-    base_url = url.split("/")[0]
+    base_url = url.split("/")[2]
     response = None
     download_size = 0
     tries = 4
@@ -43,31 +47,24 @@ def _make_http_request(url):
             response_obj = urlopen(url,timeout=10)
             response = response_obj.read().decode("utf-8")
             successful = True
-        except:
-            try:
-                raise
-            except HTTPError as e:
-                response_obj = e
-            except URLError as e:
-                response_obj = type("", (), dict(code=-1,reason=str(e.reason),headers=type("", (), dict(items=lambda x: (),get=lambda x,y,z: "0"))()))()
-            except Exception as e:
-                response_obj = type("", (), dict(code=-2,reason=str(e),headers=type("", (), dict(items=lambda x: (),get=lambda x,y,z: "0"))()))()
-            finally:
-                if response_obj.code == 429:
-                    i -= 1
-                    if base_url not in cooldown:
-                        cooldown.add(base_url)
-                        cooldown_timer = 0.01
-                        while cooldown_timer < 60:
-                            sleep(cooldown_timer)
-                            try:
-                                response_obj = urlopen(url,timeout=10)
-                                response = response_obj.read().decode("utf-8")
-                                break
-                            except:
-                                cooldown_timer *= 2
-                        cooldown.discard(base_url)
-                        successful = True
+        except Exception as e:
+            response_obj = type("", (), _get_error(e))()
+            if response_obj.code == 429:
+                i -= 1
+                if base_url not in cooldown:
+                    cooldown.add(base_url)
+                    cooldown_timer = 0.01
+                    while cooldown_timer < 60:
+                        sleep(cooldown_timer)
+                        try:
+                            response_obj = urlopen(url,timeout=10)
+                            response = response_obj.read().decode("utf-8")
+                            break
+                        except Exception as e2:
+                            cooldown_timer *= 2
+                            response_obj = type("", (), _get_error(e2))()
+                    cooldown.discard(base_url)
+                    successful = True
         finally:
             line_size = len(response_obj.reason)+15
             header_size = sum(len(key)+len(value)+4 for key,value in response_obj.headers.items())+2
@@ -81,6 +78,33 @@ def _make_http_request(url):
     start_times.insert(0,time())
     download_sizes.insert(0,download_size)
     return {"url":url,"response":response}
+
+def _get_error(e):
+    error = {"type":None,"code":None,"reason":None,"headers":{}}
+    if type(e) == HTTPError:
+        error = {"type":type(e),"code":e.code,"reason":e.reason,"headers":{}}
+        for key,value in e.headers.items():
+            error["headers"][key] = value
+    elif type(e) == URLError:
+        if type(e.reason) == TimeoutError:
+            error = {"type":type(e.reason),"code":ETIMEDOUT,"reason":str(e.reason).split(": ")[-1],"headers":{}}
+        elif type(e.reason) in (ConnectionRefusedError, ConnectionResetError, gaierror, OSError):
+            error = {"type":type(e.reason),"code":e.reason.errno,"reason":e.reason.strerror,"headers":{}}
+        elif type(e.reason) == SSLCertVerificationError:
+            error = {"type":type(e.reason),"code":e.reason.verify_code,"reason":e.reason.verify_message,"headers":{}}
+        elif type(e.reason) == SSLError:
+            error = {"type":type(e.reason),"code":e.reason.errno,"reason":e.reason.strerror,"headers":{}}
+        else:
+            error = {"type":None,"code":-303,"reason":str(e),"headers":{}}
+    elif type(e) == TimeoutError:
+        error = {"type":type(e),"code":ETIMEDOUT,"reason":str(e),"headers":{}}
+    elif type(e) == RemoteDisconnected:
+        error = {"type":type(e),"code":-301,"reason":str(e),"headers":{}}
+    elif type(e) == IncompleteRead:
+        error = {"type":type(e),"code":-302,"reason":str(e),"headers":{}}
+    else:
+        error = {"type":None,"code":-304,"reason":str(e),"headers":{}}
+    return error
 
 def _multithread(function,arguments,pool_size):
     threads = max(1,pool_size)
