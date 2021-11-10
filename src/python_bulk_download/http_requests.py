@@ -32,6 +32,7 @@ def _make_http_request(url):
         url = "https://"+url
     base_url = url.split("/")[2]
     response = None
+    error = None
     download_size = 0
     tries = 4
     i = 0
@@ -48,7 +49,8 @@ def _make_http_request(url):
             response = response_obj.read().decode("utf-8")
             successful = True
         except Exception as e:
-            response_obj = type("", (), _get_error(e))()
+            error = _get_error(e)
+            response_obj = type("", (), error)()
             if response_obj.code == 429:
                 i -= 1
                 if base_url not in cooldown:
@@ -62,7 +64,8 @@ def _make_http_request(url):
                             break
                         except Exception as e2:
                             cooldown_timer *= 2
-                            response_obj = type("", (), _get_error(e2))()
+                            error = _get_error(e2)
+                            response_obj = type("", (), error)()
                     cooldown.discard(base_url)
                     successful = True
         finally:
@@ -77,7 +80,9 @@ def _make_http_request(url):
         download_sizes.pop()
     start_times.insert(0,time())
     download_sizes.insert(0,download_size)
-    return {"url":url,"response":response}
+    if response is not None:
+        return {"url":url,"response":response,"error":None}
+    return {"url":url,"response":None,"error":error}
 
 def _get_error(e):
     error = {"type":None,"code":None,"reason":None,"headers":{}}
