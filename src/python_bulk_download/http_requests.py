@@ -40,6 +40,8 @@ def _make_http_request(url):
     while 0 < max_bandwidth_usage*0.95 < sum(download_sizes*8)/(time()-start_times[-1])/pow(10,6):
         sleep(random_float(0,1))
     while i < tries:
+        if i > 0:
+            sleep(random_float(0,1))
         i += 1
         successful = False
         while base_url in cooldown:
