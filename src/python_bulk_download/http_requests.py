@@ -8,8 +8,9 @@ from multiprocessing.pool import ThreadPool as thread_pool
 from time import time, sleep
 from random import uniform as random_float
 from sys import getsizeof
+from functools import partial
 
-def make_http_requests(urls,bandwidth_utilisation=-1,threads=32):
+def make_http_requests(urls,tries=4,bandwidth_utilisation=-1,threads=128):
     global cooldown
     cooldown = set()
     global start_times
@@ -19,11 +20,11 @@ def make_http_requests(urls,bandwidth_utilisation=-1,threads=32):
     global max_bandwidth_usage
     max_bandwidth_usage = bandwidth_utilisation
     if hasattr(urls, '__iter__') and not isinstance(urls,str):
-        return _multithread(function=_make_http_request,arguments=urls,pool_size=threads)
+        return _multithread(function=_make_http_request,arguments=(urls,tries),pool_size=threads)
     else:
-        return _make_http_request(urls)
+        return _make_http_request(urls,tries)
 
-def _make_http_request(url):
+def _make_http_request(url,tries):
     global cooldown
     global start_times
     global download_sizes
@@ -34,7 +35,6 @@ def _make_http_request(url):
     response = None
     error = None
     download_size = 0
-    tries = 4
     i = 0
     sleep(random_float(0,1))
     while 0 < max_bandwidth_usage*0.95 < sum(download_sizes*8)/(time()-start_times[-1])/pow(10,6):
@@ -116,7 +116,7 @@ def _get_error(e):
 def _multithread(function,arguments,pool_size):
     threads = max(1,pool_size)
     with thread_pool(threads) as pool:
-        results = pool.imap_unordered(function,arguments)
+        results = pool.imap_unordered(partial(function,tries=arguments[1]),arguments[0])
         pool.close()
         pool.join()
     return (result for result in results if result is not None)
