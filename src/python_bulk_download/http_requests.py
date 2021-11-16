@@ -6,9 +6,11 @@ from ssl import SSLCertVerificationError, SSLError
 from http.client import RemoteDisconnected,IncompleteRead
 from multiprocessing.pool import ThreadPool as thread_pool
 from time import time, sleep
-from random import uniform as random_float
+from random import uniform as random_float,randint as random_int
 from sys import getsizeof
 from functools import partial
+import json
+from os import path,listdir,mkdir,rmdir,remove as rmfile
 
 def make_http_requests(urls,tries=4,bandwidth_utilisation=-1,threads=128):
     global cooldown
@@ -19,12 +21,22 @@ def make_http_requests(urls,tries=4,bandwidth_utilisation=-1,threads=128):
     download_sizes = [0]
     global max_bandwidth_usage
     max_bandwidth_usage = bandwidth_utilisation
+    output_dir = path.join(path.dirname(path.abspath(__file__)),"output_data")
+    old_file_names = [filename for filename in listdir(output_dir) if filename[0] != "."]
+    for old_file_name in old_file_names:
+        rmfile(path.join(output_dir,old_file_name))
+    output_file_name = "http_responses_"+str(random_int(0,9999)).zfill(4)+".txt"
+    output_file = path.join(output_dir,output_file_name)
     if hasattr(urls, '__iter__') and not isinstance(urls,str):
-        return _multithread(function=_make_http_request,arguments=(urls,tries),pool_size=threads)
+        _multithread(function=_make_http_request,arguments=(urls,output_file,tries),pool_size=threads)
     else:
-        return _make_http_request(urls,tries)
+        _make_http_request(urls,output_file,tries)
+    with open(output_file) as responses:
+        for response in responses:
+            yield json.loads(response)
+    rmfile(output_file)
 
-def _make_http_request(url,tries):
+def _make_http_request(url,output_file,tries):
     global cooldown
     global start_times
     global download_sizes
@@ -83,8 +95,12 @@ def _make_http_request(url,tries):
     start_times.insert(0,time())
     download_sizes.insert(0,download_size)
     if response is not None:
-        return {"url":url,"response":response,"error":None}
-    return {"url":url,"response":None,"error":error}
+        result = {"url":url,"response":response,"error":None}
+    else:
+        result ={"url":url,"response":None,"error":error}
+    file_obj = open(output_file,"a")
+    file_obj.write(json.dumps(result)+"\n")
+    file_obj.close()
 
 def _get_error(e):
     error = {"type":None,"code":None,"reason":None,"headers":{}}
@@ -116,7 +132,7 @@ def _get_error(e):
 def _multithread(function,arguments,pool_size):
     threads = max(1,pool_size)
     with thread_pool(threads) as pool:
-        results = pool.imap_unordered(partial(function,tries=arguments[1]),arguments[0])
+        results = pool.imap_unordered(partial(function,output_file=arguments[1],tries=arguments[2]),arguments[0])
         pool.close()
         pool.join()
     return (result for result in results if result is not None)
