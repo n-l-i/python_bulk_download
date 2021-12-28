@@ -27,6 +27,8 @@ def make_http_requests(urls,tries=4,bandwidth_utilisation=-1,threads=128):
         rmfile(path.join(output_dir,old_file_name))
     output_file_name = "http_responses_"+str(random_int(0,9999)).zfill(4)+".txt"
     output_file = path.join(output_dir,output_file_name)
+    file_obj = open(output_file,"w")
+    file_obj.close()
     if hasattr(urls, '__iter__') and not isinstance(urls,str):
         _multithread(function=_make_http_request,arguments=(urls,output_file,tries),pool_size=threads)
     else:
