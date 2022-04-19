@@ -1,7 +1,7 @@
 from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
 from errno import ETIMEDOUT
-from socket import gaierror
+from socket import gaierror,timeout as timeout_error
 from ssl import SSLCertVerificationError, SSLError
 from http.client import RemoteDisconnected,IncompleteRead
 from multiprocessing.pool import ThreadPool as thread_pool
@@ -111,7 +111,7 @@ def _get_error(e):
         for key,value in e.headers.items():
             error["headers"][key] = value
     elif type(e) == URLError:
-        if type(e.reason) == TimeoutError:
+        if type(e.reason) in (TimeoutError,timeout_error):
             error = {"type":type(e.reason),"code":ETIMEDOUT,"reason":str(e.reason).split(": ")[-1],"headers":{}}
         elif type(e.reason) in (ConnectionRefusedError, ConnectionResetError, gaierror, OSError):
             error = {"type":type(e.reason),"code":e.reason.errno,"reason":e.reason.strerror,"headers":{}}
