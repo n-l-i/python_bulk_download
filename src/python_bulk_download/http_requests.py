@@ -12,7 +12,7 @@ from functools import partial
 import json
 from os import path,listdir,mkdir,rmdir,remove as rmfile
 
-def make_http_requests(urls,tries=4,bandwidth_utilisation=-1,threads=128):
+def make_http_requests(urls,tries=3,bandwidth_utilisation=-1,threads=128):
     global cooldown
     cooldown = set()
     global start_times
@@ -61,7 +61,7 @@ def _make_http_request(url,output_file,tries):
         while base_url in cooldown:
             sleep(random_float(0,0.1))
         try:
-            response_obj = urlopen(url,timeout=10)
+            response_obj = urlopen(url,timeout=5)
             response = response_obj.read().decode("utf-8")
             successful = True
         except Exception as e:
